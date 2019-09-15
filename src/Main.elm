@@ -6,6 +6,7 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Html.Keyed as Keyed
 import Html.Lazy exposing (..)
+import Markdown
 
 
 main =
@@ -260,7 +261,7 @@ viewKeyedColumn model column =
 viewColumn : Model -> Column -> Html Msg
 viewColumn model column =
     div [ class "column" ]
-        [ lazy2 viewColumnHeader model column
+        [ viewColumnHeader model column
         , Keyed.node "div" [ class "column__cards" ] (List.map (viewKeyedCard model) column.cards)
         , button [ onClick (AddCard column.id) ] [ text "Add new card" ]
         ]
@@ -310,6 +311,6 @@ viewCard model card =
                 [ div [ class "card__name" ]
                     [ h3 [] [ text card.name ]
                     ]
-                , p [ class "card__description" ] [ text card.description ]
+                , div [ class "card__description" ] (Markdown.toHtml Nothing card.description)
                 ]
         ]

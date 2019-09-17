@@ -242,12 +242,11 @@ newCard newId =
 view : Model -> Html Msg
 view model =
     div []
-        [ div [ class "columns" ]
-            [ Keyed.node "div" [] (List.map (viewKeyedColumn model) model.columns)
-            , div [ class "column column--add-new" ]
-                [ button [ onClick AddColumn ] [ text "Add new column" ]
-                ]
-            ]
+        [ Keyed.node "div"
+            [ class "columns" ]
+          <|
+            List.map (viewKeyedColumn model) model.columns
+                ++ [ ( "add", div [ class "column column--add-new" ] [ button [ onClick AddColumn ] [ text "+ Add new column" ] ] ) ]
         ]
 
 
@@ -263,7 +262,7 @@ viewColumn model column =
     div [ class "column" ]
         [ viewColumnHeader model column
         , Keyed.node "div" [ class "column__cards" ] (List.map (viewKeyedCard model) column.cards)
-        , button [ onClick (AddCard column.id) ] [ text "Add new card" ]
+        , button [ class "column__add-card", onClick (AddCard column.id) ] [ text "Add new card" ]
         ]
 
 

@@ -1,16 +1,24 @@
 module Main exposing (main)
 
-import Browser exposing (sandbox)
+import Browser exposing (element)
+import Browser.Events
+import Debug
 import Html exposing (..)
-import Html.Attributes exposing (..)
+import Html.Attributes exposing (class, type_, value)
 import Html.Events exposing (..)
 import Html.Keyed as Keyed
 import Html.Lazy exposing (..)
+import Json.Decode as D
 import Markdown
 
 
 main =
-    Browser.sandbox { init = initialModel, view = view, update = update }
+    Browser.element
+        { init = init
+        , view = view
+        , subscriptions = subscriptions
+        , update = update
+        }
 
 
 
@@ -22,6 +30,7 @@ type alias Model =
     , newCardName : String
     , newCardDescription : String
     , newColumnName : String
+    , updating : Bool
     }
 
 
@@ -41,13 +50,16 @@ type alias Card =
     }
 
 
-initialModel : Model
-initialModel =
-    { columns = []
-    , newCardName = ""
-    , newCardDescription = ""
-    , newColumnName = ""
-    }
+init : () -> ( Model, Cmd msg )
+init _ =
+    ( { columns = []
+      , newCardName = ""
+      , newCardDescription = ""
+      , newColumnName = ""
+      , updating = False
+      }
+    , Cmd.none
+    )
 
 
 getNextId : List { a | id : Int } -> Int
@@ -75,8 +87,8 @@ getNextCardId columns =
 type Msg
     = AddColumn
     | AddCard Int
-    | CancelMarkCardForUpdating
-    | CancelMarkColumnForUpdating
+    | CancelUpdating
+    | DoNothing
     | MarkCardForUpdating Int
     | MarkColumnForUpdating Int
     | StoreCardName String
@@ -86,56 +98,55 @@ type Msg
     | UpdateColumn
 
 
-update : Msg -> Model -> Model
+update : Msg -> Model -> ( Model, Cmd msg )
 update msg model =
+    let
+        updateSilent =
+            \m ->
+                ( m, Cmd.none )
+    in
     case msg of
-        -- Add simple dummy column. Can be modified afterwards.
         AddColumn ->
-            { model | columns = List.append model.columns [ newColumn (getNextId model.columns) ] }
+            updateSilent { model | columns = List.append model.columns [ newColumn (getNextId model.columns) ] }
 
-        -- Add simple dummy card to the column identified by id. Can be modified afterwards.
-        AddCard id ->
+        AddCard columnId ->
             let
                 map =
                     \c ->
-                        if c.id == id then
+                        if c.id == columnId then
                             { c | cards = List.append c.cards [ newCard (getNextCardId model.columns) ] }
 
                         else
                             c
             in
-            { model | columns = List.map map model.columns }
+            updateSilent { model | columns = List.map map model.columns }
 
         -- Mark the column identified by id as being updated. Store its name as the default value.
-        MarkColumnForUpdating id ->
+        MarkColumnForUpdating columnId ->
             let
                 map =
                     \c ->
-                        if c.id == id then
+                        if c.id == columnId then
                             { c | updating = True }
 
                         else
                             { c | updating = False }
-            in
-            { model
-                | columns = List.map map model.columns
-                , newColumnName =
-                    case List.head (List.filter (\c -> c.id == id) model.columns) of
+
+                columnName =
+                    case List.head (List.filter (\c -> c.id == columnId) model.columns) of
                         Nothing ->
                             -- Failsafe
                             ""
 
                         Just c ->
                             c.name
-            }
-
-        -- Cancel the updating of the column.
-        CancelMarkColumnForUpdating ->
-            let
-                map =
-                    \c -> { c | updating = False }
             in
-            { model | columns = List.map map model.columns }
+            updateSilent
+                { model
+                    | columns = List.map map model.columns
+                    , newColumnName = columnName
+                    , updating = True
+                }
 
         -- Update the flagged column's name with the one stored.
         UpdateColumn ->
@@ -148,18 +159,18 @@ update msg model =
                         else
                             c
             in
-            { model | columns = List.map map model.columns }
+            updateSilent { model | columns = List.map map model.columns, updating = False }
 
-        -- Store the typed column name.
+        -- Store the new column name, as it's being typed.
         StoreColumnName name ->
-            { model | newColumnName = name }
+            updateSilent { model | newColumnName = name }
 
-        -- Mark the card identified by id as being updated. Store its name as the default value.
-        MarkCardForUpdating id ->
+        -- Mark the card identified by id as being updated. Store its name and description as the default values.
+        MarkCardForUpdating cardId ->
             let
                 internalMap =
                     \c ->
-                        if c.id == id then
+                        if c.id == cardId then
                             { c | updating = True }
 
                         else
@@ -169,36 +180,38 @@ update msg model =
                     \column -> { column | cards = List.map internalMap column.cards }
 
                 card =
-                    List.head (List.filter (\c -> c.id == id) (List.concatMap (\column -> column.cards) model.columns))
+                    List.head (List.filter (\c -> c.id == cardId) (List.concatMap (\column -> column.cards) model.columns))
             in
-            { model
-                | columns = List.map map model.columns
-                , newCardName =
-                    case card of
-                        Nothing ->
-                            ""
+            updateSilent
+                { model
+                    | columns = List.map map model.columns
+                    , newCardName =
+                        case card of
+                            Nothing ->
+                                ""
 
-                        Just c ->
-                            c.name
-                , newCardDescription =
-                    case card of
-                        Nothing ->
-                            ""
+                            Just c ->
+                                c.name
+                    , newCardDescription =
+                        case card of
+                            Nothing ->
+                                ""
 
-                        Just c ->
-                            c.description
-            }
+                            Just c ->
+                                c.description
+                    , updating = True
+                }
 
-        -- Cancel the updating of the column.
-        CancelMarkCardForUpdating ->
+        -- Cancel the updating of a card or column.
+        CancelUpdating ->
             let
                 internalMap =
                     \card -> { card | updating = False }
 
                 map =
-                    \column -> { column | cards = List.map internalMap column.cards }
+                    \column -> { column | cards = List.map internalMap column.cards, updating = False }
             in
-            { model | columns = List.map map model.columns }
+            updateSilent { model | columns = List.map map model.columns, updating = False }
 
         -- Update the flagged card's name and description with the ones stored.
         UpdateCard ->
@@ -214,25 +227,66 @@ update msg model =
                 map =
                     \column -> { column | cards = List.map internalMap column.cards }
             in
-            { model | columns = List.map map model.columns }
+            updateSilent { model | columns = List.map map model.columns, updating = False }
 
-        -- Store the typed card name.
+        -- Store the new card name as it's being typed.
         StoreCardName name ->
-            { model | newCardName = name }
+            updateSilent { model | newCardName = name }
 
-        -- Store the typed card description.
+        -- Store the new card description as it's being typed.
         StoreCardDescription description ->
-            { model | newCardDescription = description }
+            updateSilent { model | newCardDescription = description }
+
+        -- Don't do anything. Used in subscriptions.
+        DoNothing ->
+            updateSilent model
 
 
+{-| Helper function for creating a new column.
+-}
 newColumn : Int -> Column
 newColumn newId =
     { id = newId, name = "New column", cards = [], updating = False }
 
 
+{-| Helper function for creating a new card.
+-}
 newCard : Int -> Card
 newCard newId =
     { id = newId, name = "New card", description = "", updating = False }
+
+
+
+-- SUBSCRIPTIONS
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    if model.updating then
+        Browser.Events.onKeyDown cancelOnEsc
+
+    else
+        Sub.none
+
+
+{-| Even handler. Trigger a "cancel update" message if the Esc key is pressed.
+-}
+cancelOnEsc : D.Decoder Msg
+cancelOnEsc =
+    let
+        isEsc =
+            \keyValue ->
+                case keyValue of
+                    "Escape" ->
+                        CancelUpdating
+
+                    _ ->
+                        DoNothing
+
+        pressedKey =
+            D.field "key" D.string
+    in
+    D.map isEsc pressedKey
 
 
 
@@ -250,6 +304,9 @@ view model =
         ]
 
 
+{-| Wrapper function around `viewColumn`. Adds support for both Html.Keyed and
+Html.Lazy for performance optimization.
+-}
 viewKeyedColumn : Model -> Column -> ( String, Html Msg )
 viewKeyedColumn model column =
     ( String.fromInt column.id
@@ -271,9 +328,11 @@ viewColumnHeader model column =
     div [ class "column__header" ]
         [ if column.updating then
             div [ class "column__name column__name--updating" ]
-                [ input [ type_ "text", value model.newColumnName, onInput StoreColumnName ] []
-                , button [ onClick UpdateColumn ] [ text "Update" ]
-                , span [ onClick CancelMarkColumnForUpdating ] [ text "Cancel" ]
+                [ form [ onSubmit UpdateColumn ]
+                    [ input [ type_ "text", value model.newColumnName, onInput StoreColumnName ] []
+                    , button [ type_ "submit" ] [ text "Update" ]
+                    , span [ onClick CancelUpdating ] [ text "Cancel" ]
+                    ]
                 ]
 
           else
@@ -283,6 +342,9 @@ viewColumnHeader model column =
         ]
 
 
+{-| Wrapper function around `viewCard`. Adds support for both Html.Keyed and
+Html.Lazy for performance optimization.
+-}
 viewKeyedCard : Model -> Card -> ( String, Html Msg )
 viewKeyedCard model card =
     ( String.fromInt card.id
@@ -292,24 +354,24 @@ viewKeyedCard model card =
 
 viewCard : Model -> Card -> Html Msg
 viewCard model card =
-    div [ class "card" ]
-        [ if card.updating then
-            div []
-                [ div [ class "card__name card__name--updating" ]
+    if card.updating then
+        div [ class "card card--updating" ]
+            [ form [ onSubmit UpdateCard ]
+                [ div [ class "card__name" ]
                     [ input [ type_ "text", value model.newCardName, onInput StoreCardName ] []
                     ]
-                , div [ class "card__description card__description--updating" ]
+                , div [ class "card__description" ]
                     [ textarea [ onInput StoreCardDescription ] [ text model.newCardDescription ]
                     ]
-                , button [ onClick UpdateCard ] [ text "Update" ]
-                , span [ onClick CancelMarkCardForUpdating ] [ text "Cancel" ]
+                , button [ type_ "submit" ] [ text "Update" ]
+                , span [ onClick CancelUpdating ] [ text "Cancel" ]
                 ]
+            ]
 
-          else
-            div [ onClick (MarkCardForUpdating card.id) ]
-                [ div [ class "card__name" ]
-                    [ h3 [] [ text card.name ]
-                    ]
-                , div [ class "card__description" ] (Markdown.toHtml Nothing card.description)
+    else
+        div [ class "card", onClick (MarkCardForUpdating card.id) ]
+            [ div [ class "card__name" ]
+                [ h3 [] [ text card.name ]
                 ]
-        ]
+            , div [ class "card__description" ] (Markdown.toHtml Nothing card.description)
+            ]

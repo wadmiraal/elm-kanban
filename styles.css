@@ -11,30 +11,32 @@ body {
 input[type="text"],
 textarea {
   display: block;
-  padding: 0.25em 0.5em;
+  padding: 0.5em;
   width: 100%;
 
   border: 1px solid #ccc;
   border-radius: 3px;
 
+  font-family: sans-serif;
   font-size: 1em;
 }
 
+input[type="text"] {
+  font-weight: bold;
+}
+
 button {
-  border: 0;
-
-  border-radius: 3px;
-
   padding: 5px 10px;
-
-  font-size: 1em;
-
   margin-right: 0.5em;
+  margin-top: 0.5em;
 
   background-color: #26c696;
 
-  color: white;
+  border-radius: 3px;
+  border: 0;
 
+  font-size: 1em;
+  color: white;
   font-weight: bold;
 }
 
@@ -69,6 +71,7 @@ button {
   width: 100%;
   height: 100%;
   min-height: 200px;
+  margin: 0;
 
   border: 3px dashed #777;
   border-radius: 5px;
@@ -86,13 +89,14 @@ button {
 }
 
 .column__header {
-  margin-bottom: 10px;
+  margin-bottom: 20px;
 }
 
 .column__name h2 {
   margin: 0;
 
-  font-size: 1.1em;
+  font-size: 1em;
+  color: #313131;
 }
 
 .column__add-card {
@@ -129,4 +133,9 @@ button {
 .card__name h3 {
   margin: 0;
   font-size: 1em;
+}
+
+.card__description {
+  font-size: 0.8em;
+  color: #313131;
 }

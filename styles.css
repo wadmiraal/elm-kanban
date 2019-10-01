@@ -38,6 +38,26 @@ button {
   font-size: 1em;
   color: white;
   font-weight: bold;
+
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: #26dba5;
+}
+
+.cancel-link {
+  border-bottom: 1px solid #7b7b7b;
+
+  color: #424242;
+
+  cursor: pointer;
+}
+
+.cancel-link:hover {
+  border-bottom-color: #bfbfbf;
+
+  color: #606060;
 }
 
 /* Columns */
@@ -84,8 +104,6 @@ button {
 
 .column--add-new button:hover {
   background: rgba(255, 255, 255, 0.2);
-
-  cursor: pointer;
 }
 
 .column__header {

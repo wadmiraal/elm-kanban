@@ -26,7 +26,7 @@ main =
 
 
 type alias Model =
-    { columns : List Column
+    { columns : List ( Int, Column )
     , newCardName : String
     , newCardDescription : String
     , newColumnName : String
@@ -35,8 +35,7 @@ type alias Model =
 
 
 type alias Column =
-    { cards : List Card
-    , id : Int
+    { cards : List ( Int, Card )
     , name : String
     , updating : Bool
     }
@@ -44,7 +43,6 @@ type alias Column =
 
 type alias Card =
     { description : String
-    , id : Int
     , name : String
     , updating : Bool
     }
@@ -62,20 +60,20 @@ init _ =
     )
 
 
-getNextId : List { a | id : Int } -> Int
+getNextId : List ( Int, a ) -> Int
 getNextId list =
     let
         lastId =
-            List.foldl Basics.max 0 (List.map (\c -> c.id) list)
+            List.foldl Basics.max 0 (List.map (\( id, _ ) -> id) list)
     in
     lastId + 1
 
 
-getNextCardId : List Column -> Int
+getNextCardId : List ( Int, Column ) -> Int
 getNextCardId columns =
     let
         allCards =
-            List.concatMap (\column -> column.cards) columns
+            List.concatMap (\( _, column ) -> column.cards) columns
     in
     getNextId allCards
 
@@ -107,17 +105,17 @@ update msg model =
     in
     case msg of
         AddColumn ->
-            updateSilent { model | columns = List.append model.columns [ newColumn (getNextId model.columns) ] }
+            updateSilent { model | columns = List.append model.columns [ ( getNextId model.columns, newColumn ) ] }
 
         AddCard columnId ->
             let
                 map =
-                    \c ->
-                        if c.id == columnId then
-                            { c | cards = List.append c.cards [ newCard (getNextCardId model.columns) ] }
+                    \( id, c ) ->
+                        if id == columnId then
+                            ( id, { c | cards = List.append c.cards [ ( getNextCardId model.columns, newCard ) ] } )
 
                         else
-                            c
+                            ( id, c )
             in
             updateSilent { model | columns = List.map map model.columns }
 
@@ -125,20 +123,20 @@ update msg model =
         MarkColumnForUpdating columnId ->
             let
                 map =
-                    \c ->
-                        if c.id == columnId then
-                            { c | updating = True }
+                    \( id, c ) ->
+                        if id == columnId then
+                            ( id, { c | updating = True } )
 
                         else
-                            { c | updating = False }
+                            ( id, { c | updating = False } )
 
                 columnName =
-                    case List.head (List.filter (\c -> c.id == columnId) model.columns) of
+                    case List.head (List.filter (\( id, c ) -> id == columnId) model.columns) of
                         Nothing ->
                             -- Failsafe
                             ""
 
-                        Just c ->
+                        Just ( _, c ) ->
                             c.name
             in
             updateSilent
@@ -152,12 +150,12 @@ update msg model =
         UpdateColumn ->
             let
                 map =
-                    \c ->
+                    \( id, c ) ->
                         if c.updating then
-                            { c | name = model.newColumnName, updating = False }
+                            ( id, { c | name = model.newColumnName, updating = False } )
 
                         else
-                            c
+                            ( id, c )
             in
             updateSilent { model | columns = List.map map model.columns, updating = False }
 
@@ -169,18 +167,18 @@ update msg model =
         MarkCardForUpdating cardId ->
             let
                 internalMap =
-                    \c ->
-                        if c.id == cardId then
-                            { c | updating = True }
+                    \( id, c ) ->
+                        if id == cardId then
+                            ( id, { c | updating = True } )
 
                         else
-                            { c | updating = False }
+                            ( id, { c | updating = False } )
 
                 map =
-                    \column -> { column | cards = List.map internalMap column.cards }
+                    \( columnId, column ) -> ( columnId, { column | cards = List.map internalMap column.cards } )
 
                 card =
-                    List.head (List.filter (\c -> c.id == cardId) (List.concatMap (\column -> column.cards) model.columns))
+                    List.head (List.filter (\( id, _ ) -> id == cardId) (List.concatMap (\( _, column ) -> column.cards) model.columns))
             in
             updateSilent
                 { model
@@ -190,14 +188,14 @@ update msg model =
                             Nothing ->
                                 ""
 
-                            Just c ->
+                            Just ( _, c ) ->
                                 c.name
                     , newCardDescription =
                         case card of
                             Nothing ->
                                 ""
 
-                            Just c ->
+                            Just ( _, c ) ->
                                 c.description
                     , updating = True
                 }
@@ -206,10 +204,10 @@ update msg model =
         CancelUpdating ->
             let
                 internalMap =
-                    \card -> { card | updating = False }
+                    \( cardId, card ) -> ( cardId, { card | updating = False } )
 
                 map =
-                    \column -> { column | cards = List.map internalMap column.cards, updating = False }
+                    \( columnId, column ) -> ( columnId, { column | cards = List.map internalMap column.cards, updating = False } )
             in
             updateSilent { model | columns = List.map map model.columns, updating = False }
 
@@ -217,15 +215,15 @@ update msg model =
         UpdateCard ->
             let
                 internalMap =
-                    \card ->
+                    \( cardId, card ) ->
                         if card.updating then
-                            { card | name = model.newCardName, description = model.newCardDescription, updating = False }
+                            ( cardId, { card | name = model.newCardName, description = model.newCardDescription, updating = False } )
 
                         else
-                            card
+                            ( cardId, card )
 
                 map =
-                    \column -> { column | cards = List.map internalMap column.cards }
+                    \( columnId, column ) -> ( columnId, { column | cards = List.map internalMap column.cards } )
             in
             updateSilent { model | columns = List.map map model.columns, updating = False }
 
@@ -244,16 +242,16 @@ update msg model =
 
 {-| Helper function for creating a new column.
 -}
-newColumn : Int -> Column
-newColumn newId =
-    { id = newId, name = "New column", cards = [], updating = False }
+newColumn : Column
+newColumn =
+    { name = "New column", cards = [], updating = False }
 
 
 {-| Helper function for creating a new card.
 -}
-newCard : Int -> Card
-newCard newId =
-    { id = newId, name = "New card", description = "", updating = False }
+newCard : Card
+newCard =
+    { name = "New card", description = "", updating = False }
 
 
 
@@ -298,45 +296,57 @@ view model =
     div []
         [ Keyed.node "div"
             [ class "columns" ]
-          <|
-            List.map (viewKeyedColumn model) model.columns
+            (List.map (viewKeyedColumn model) model.columns
                 ++ [ ( "add", div [ class "column column--add-new" ] [ button [ onClick AddColumn ] [ text "+ Add new column" ] ] ) ]
+            )
         ]
 
 
 {-| Wrapper function around `viewColumn`. Adds support for both Html.Keyed and
 Html.Lazy for performance optimization.
 -}
-viewKeyedColumn : Model -> Column -> ( String, Html Msg )
-viewKeyedColumn model column =
-    ( String.fromInt column.id
-    , lazy2 viewColumn model column
+viewKeyedColumn : Model -> ( Int, Column ) -> ( String, Html Msg )
+viewKeyedColumn model item =
+    let
+        ( id, _ ) =
+            item
+    in
+    ( String.fromInt id
+    , lazy2 viewColumn model item
     )
 
 
-viewColumn : Model -> Column -> Html Msg
-viewColumn model column =
+viewColumn : Model -> ( Int, Column ) -> Html Msg
+viewColumn model item =
+    let
+        ( id, column ) =
+            item
+    in
     div [ class "column" ]
-        [ viewColumnHeader model column
+        [ viewColumnHeader model item
         , Keyed.node "div" [ class "column__cards" ] (List.map (viewKeyedCard model) column.cards)
-        , button [ class "column__add-card", onClick (AddCard column.id) ] [ text "Add new card" ]
+        , button [ class "column__add-card", onClick (AddCard id) ] [ text "Add new card" ]
         ]
 
 
-viewColumnHeader : Model -> Column -> Html Msg
-viewColumnHeader model column =
+viewColumnHeader : Model -> ( Int, Column ) -> Html Msg
+viewColumnHeader model item =
+    let
+        ( id, column ) =
+            item
+    in
     div [ class "column__header" ]
         [ if column.updating then
             div [ class "column__name column__name--updating" ]
                 [ form [ onSubmit UpdateColumn ]
                     [ input [ type_ "text", value model.newColumnName, onInput StoreColumnName ] []
                     , button [ type_ "submit" ] [ text "Update" ]
-                    , span [ onClick CancelUpdating ] [ text "Cancel" ]
+                    , span [ class "cancel-link", onClick CancelUpdating ] [ text "Cancel" ]
                     ]
                 ]
 
           else
-            div [ class "column__name", onClick (MarkColumnForUpdating column.id) ]
+            div [ class "column__name", onClick (MarkColumnForUpdating id) ]
                 [ h2 [] [ text column.name ]
                 ]
         ]
@@ -345,15 +355,19 @@ viewColumnHeader model column =
 {-| Wrapper function around `viewCard`. Adds support for both Html.Keyed and
 Html.Lazy for performance optimization.
 -}
-viewKeyedCard : Model -> Card -> ( String, Html Msg )
-viewKeyedCard model card =
-    ( String.fromInt card.id
-    , lazy2 viewCard model card
+viewKeyedCard : Model -> ( Int, Card ) -> ( String, Html Msg )
+viewKeyedCard model item =
+    let
+        ( id, _ ) =
+            item
+    in
+    ( String.fromInt id
+    , lazy2 viewCard model item
     )
 
 
-viewCard : Model -> Card -> Html Msg
-viewCard model card =
+viewCard : Model -> ( Int, Card ) -> Html Msg
+viewCard model ( id, card ) =
     if card.updating then
         div [ class "card card--updating" ]
             [ form [ onSubmit UpdateCard ]
@@ -364,12 +378,12 @@ viewCard model card =
                     [ textarea [ onInput StoreCardDescription ] [ text model.newCardDescription ]
                     ]
                 , button [ type_ "submit" ] [ text "Update" ]
-                , span [ onClick CancelUpdating ] [ text "Cancel" ]
+                , span [ class "cancel-link", onClick CancelUpdating ] [ text "Cancel" ]
                 ]
             ]
 
     else
-        div [ class "card", onClick (MarkCardForUpdating card.id) ]
+        div [ class "card", onClick (MarkCardForUpdating id) ]
             [ div [ class "card__name" ]
                 [ h3 [] [ text card.name ]
                 ]

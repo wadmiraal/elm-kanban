@@ -110,6 +110,22 @@ button:hover {
   margin-bottom: 20px;
 }
 
+.column__name {
+  padding: 3px;
+}
+
+.column__name:hover {
+  background: #ddd;
+
+  cursor: pointer;
+}
+
+.column__name--updating:hover {
+  background: transparent;
+
+  cursor: default;
+}
+
 .column__name h2 {
   margin: 0;
 
@@ -142,9 +158,12 @@ button:hover {
   border-radius: 5px;
 
   background: #fff;
+
+  cursor: grab;
 }
 
 .card__name {
+  padding: 3px;
   margin-bottom: 10px;
 }
 
@@ -154,6 +173,26 @@ button:hover {
 }
 
 .card__description {
+  padding: 3px;
+
   font-size: 0.8em;
   color: #313131;
+}
+
+.card__name:hover,
+.card__description:hover {
+  background: #efefef;
+
+  cursor: pointer;
+}
+
+.card--updating {
+  cursor: default;
+}
+
+.card--updating .card__name:hover,
+.card--updating .card__description:hover {
+  background: transparent;
+
+  cursor: inherit;
 }

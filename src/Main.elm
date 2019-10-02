@@ -105,14 +105,14 @@ update msg model =
     in
     case msg of
         AddColumn ->
-            updateSilent { model | columns = List.append model.columns [ ( getNextId model.columns, newColumn ) ] }
+            updateSilent { model | columns = model.columns ++ [ ( getNextId model.columns, newColumn ) ] }
 
         AddCard columnId ->
             let
                 map =
                     \( id, c ) ->
                         if id == columnId then
-                            ( id, { c | cards = List.append c.cards [ ( getNextCardId model.columns, newCard ) ] } )
+                            ( id, { c | cards = c.cards ++ [ ( getNextCardId model.columns, newCard ) ] } )
 
                         else
                             ( id, c )

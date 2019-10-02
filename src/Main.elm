@@ -1,4 +1,4 @@
-module Main exposing (main)
+port module Main exposing (main)
 
 import Browser exposing (element)
 import Browser.Events
@@ -8,8 +8,12 @@ import Html.Attributes exposing (class, type_, value)
 import Html.Events exposing (..)
 import Html.Keyed as Keyed
 import Html.Lazy exposing (..)
+import Html5.DragDrop as DragDrop exposing (draggable, droppable)
 import Json.Decode as D
 import Markdown
+
+
+port dragstart : D.Value -> Cmd msg
 
 
 main =
@@ -27,6 +31,7 @@ main =
 
 type alias Model =
     { columns : List ( Int, Column )
+    , dragDrop : DragDrop.Model ( String, Int ) ( String, Int )
     , newCardName : String
     , newCardDescription : String
     , newColumnName : String
@@ -51,6 +56,7 @@ type alias Card =
 init : () -> ( Model, Cmd msg )
 init _ =
     ( { columns = []
+      , dragDrop = DragDrop.init
       , newCardName = ""
       , newCardDescription = ""
       , newColumnName = ""
@@ -87,6 +93,7 @@ type Msg
     | AddCard Int
     | CancelUpdating
     | DoNothing
+    | DragDropMsg (DragDrop.Msg ( String, Int ) ( String, Int ))
     | MarkCardForUpdating Int
     | MarkColumnForUpdating Int
     | StoreCardName String
@@ -102,6 +109,15 @@ update msg model =
         updateSilent =
             \m ->
                 ( m, Cmd.none )
+
+        updateDragAndDrop =
+            \m dndMsg ->
+                ( m
+                  -- This is a fix for Firefox, otherwise Drag'n'Drop doesn't work. See port above.
+                , DragDrop.getDragstartEvent dndMsg
+                    |> Maybe.map (.event >> dragstart)
+                    |> Maybe.withDefault Cmd.none
+                )
     in
     case msg of
         AddColumn ->
@@ -235,6 +251,20 @@ update msg model =
         StoreCardDescription description ->
             updateSilent { model | newCardDescription = description }
 
+        -- Drag and drop logic for re-arranging cards and columns.
+        DragDropMsg dndMsg ->
+            let
+                ( dndModel, result ) =
+                    DragDrop.update dndMsg model.dragDrop
+
+                _ =
+                    Debug.log "result" result
+
+                _ =
+                    Debug.log "dndModel" dndModel
+            in
+            updateDragAndDrop { model | dragDrop = dndModel } dndMsg
+
         -- Don't do anything. Used in subscriptions.
         DoNothing ->
             updateSilent model
@@ -321,8 +351,24 @@ viewColumn model item =
     let
         ( id, column ) =
             item
+
+        dropId =
+            DragDrop.getDropId model.dragDrop
+
+        position =
+            DragDrop.getDroppablePosition model.dragDrop
+
+        _ =
+            Debug.log "dropId" dropId
+
+        _ =
+            Debug.log "position" position
     in
-    div [ class "column" ]
+    div
+        (draggable DragDropMsg ( "column", id )
+            ++ droppable DragDropMsg ( "column", id )
+            ++ [ class "column" ]
+        )
         [ viewColumnHeader model item
         , Keyed.node "div" [ class "column__cards" ] (List.map (viewKeyedCard model) column.cards)
         , button [ class "column__add-card", onClick (AddCard id) ] [ text "Add new card" ]
@@ -383,9 +429,13 @@ viewCard model ( id, card ) =
             ]
 
     else
-        div [ class "card", onClick (MarkCardForUpdating id) ]
-            [ div [ class "card__name" ]
+        div
+            (draggable DragDropMsg ( "card", id )
+                ++ droppable DragDropMsg ( "card", id )
+                ++ [ class "card" ]
+            )
+            [ div [ class "card__name", onClick (MarkCardForUpdating id) ]
                 [ h3 [] [ text card.name ]
                 ]
-            , div [ class "card__description" ] (Markdown.toHtml Nothing card.description)
+            , div [ class "card__description", onClick (MarkCardForUpdating id) ] (Markdown.toHtml Nothing card.description)
             ]

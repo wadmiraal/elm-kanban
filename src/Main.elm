@@ -4,7 +4,7 @@ import Browser exposing (element)
 import Browser.Events
 import Debug
 import Html exposing (..)
-import Html.Attributes exposing (class, type_, value)
+import Html.Attributes exposing (attribute, class, type_, value)
 import Html.Events exposing (..)
 import Html.Keyed as Keyed
 import Html.Lazy exposing (..)
@@ -27,6 +27,7 @@ main =
 
 type alias Model =
     { columns : List ( Int, Column )
+    , dragging : Bool
     , newCardName : String
     , newCardDescription : String
     , newColumnName : String
@@ -43,14 +44,23 @@ type alias Column =
 
 type alias Card =
     { description : String
+    , dragging : Bool
     , name : String
+    , position : Maybe Position
     , updating : Bool
+    }
+
+
+type alias Position =
+    { x : Int
+    , y : Int
     }
 
 
 init : () -> ( Model, Cmd msg )
 init _ =
     ( { columns = []
+      , dragging = False
       , newCardName = ""
       , newCardDescription = ""
       , newColumnName = ""
@@ -85,8 +95,11 @@ getNextCardId columns =
 type Msg
     = AddColumn
     | AddCard Int
+    | CancelDragging
     | CancelUpdating
     | DoNothing
+    | DragCard Position
+    | MarkCardForDragging Int
     | MarkCardForUpdating Int
     | MarkColumnForUpdating Int
     | StoreCardName String
@@ -235,6 +248,48 @@ update msg model =
         StoreCardDescription description ->
             updateSilent { model | newCardDescription = description }
 
+        -- Mark the card identified by id as being dragged.
+        MarkCardForDragging cardId ->
+            let
+                internalMap =
+                    \( id, c ) ->
+                        if id == cardId then
+                            ( id, { c | dragging = True } )
+
+                        else
+                            ( id, { c | dragging = False } )
+
+                map =
+                    \( columnId, column ) -> ( columnId, { column | cards = List.map internalMap column.cards } )
+            in
+            updateSilent { model | columns = List.map map model.columns, dragging = True }
+
+        -- Cancel the dragging of a card or column.
+        CancelDragging ->
+            let
+                internalMap =
+                    \( cardId, card ) -> ( cardId, { card | dragging = False, position = Nothing } )
+
+                map =
+                    \( columnId, column ) -> ( columnId, { column | cards = List.map internalMap column.cards } )
+            in
+            updateSilent { model | columns = List.map map model.columns, dragging = False }
+
+        DragCard position ->
+            let
+                internalMap =
+                    \( cardId, card ) ->
+                        if card.dragging then
+                            ( cardId, { card | position = Just position } )
+
+                        else
+                            ( cardId, card )
+
+                map =
+                    \( columnId, column ) -> ( columnId, { column | cards = List.map internalMap column.cards } )
+            in
+            updateSilent { model | columns = List.map map model.columns }
+
         -- Don't do anything. Used in subscriptions.
         DoNothing ->
             updateSilent model
@@ -251,7 +306,7 @@ newColumn =
 -}
 newCard : Card
 newCard =
-    { name = "New card", description = "", updating = False }
+    { name = "New card", description = "", dragging = False, position = Nothing, updating = False }
 
 
 
@@ -261,30 +316,36 @@ newCard =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     if model.updating then
-        Browser.Events.onKeyDown cancelOnEsc
+        let
+            isEsc =
+                \keyValue ->
+                    case keyValue of
+                        "Escape" ->
+                            CancelUpdating
+
+                        _ ->
+                            DoNothing
+
+            pressedKey =
+                D.field "key" D.string
+        in
+        Browser.Events.onKeyDown (D.map isEsc pressedKey)
+
+    else if model.dragging then
+        let
+            positionDecoder =
+                D.map2
+                    Position
+                    (D.field "clientX" D.int)
+                    (D.field "clientY" D.int)
+        in
+        Sub.batch
+            [ Browser.Events.onMouseMove (D.map DragCard positionDecoder)
+            , Browser.Events.onMouseUp (D.succeed CancelDragging)
+            ]
 
     else
         Sub.none
-
-
-{-| Even handler. Trigger a "cancel update" message if the Esc key is pressed.
--}
-cancelOnEsc : D.Decoder Msg
-cancelOnEsc =
-    let
-        isEsc =
-            \keyValue ->
-                case keyValue of
-                    "Escape" ->
-                        CancelUpdating
-
-                    _ ->
-                        DoNothing
-
-        pressedKey =
-            D.field "key" D.string
-    in
-    D.map isEsc pressedKey
 
 
 
@@ -382,10 +443,32 @@ viewCard model ( id, card ) =
                 ]
             ]
 
-    else
-        div [ class "card", onClick (MarkCardForUpdating id) ]
+    else if card.dragging then
+        let
+            ( left, top ) =
+                case card.position of
+                    Nothing ->
+                        ( "auto", "auto" )
+
+                    Just { x, y } ->
+                        ( String.fromInt x ++ "px", String.fromInt y ++ "px" )
+        in
+        div [ class "card card--dragging", attribute "style" ("left:" ++ left ++ "; top:" ++ top) ]
             [ div [ class "card__name" ]
                 [ h3 [] [ text card.name ]
                 ]
             , div [ class "card__description" ] (Markdown.toHtml Nothing card.description)
             ]
+
+    else
+        div [ class "card", onMouseDown (MarkCardForDragging id) ]
+            [ div [ class "card__name", onMouseDownStopProp, onClick (MarkCardForUpdating id) ]
+                [ h3 [] [ text card.name ]
+                ]
+            , div [ class "card__description", onMouseDownStopProp, onClick (MarkCardForUpdating id) ] (Markdown.toHtml Nothing card.description)
+            ]
+
+
+onMouseDownStopProp : Attribute Msg
+onMouseDownStopProp =
+    stopPropagationOn "mousedown" (D.succeed ( DoNothing, True ))

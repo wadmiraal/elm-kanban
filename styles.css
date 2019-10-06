@@ -162,6 +162,16 @@ button:hover {
   cursor: grab;
 }
 
+.card--dragging {
+  width: 230px;
+  position: absolute;
+
+  box-shadow: 0 10px 10px #ccc;
+
+  z-index: 900;
+  transform: rotate(-2deg);
+}
+
 .card__name {
   padding: 3px;
   margin-bottom: 10px;
@@ -179,9 +189,17 @@ button:hover {
   color: #313131;
 }
 
+.card__description *:first-child {
+  margin-top: 0;
+}
+
+.card__description *:last-child {
+  margin-bottom: 0;
+}
+
 .card__name:hover,
 .card__description:hover {
-  background: #efefef;
+  background: #f7f7f7;
 
   cursor: pointer;
 }

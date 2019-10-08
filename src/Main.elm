@@ -192,10 +192,15 @@ update msg model =
                             ( id, { c | updating = False } )
 
                 map =
-                    \( columnId, column ) -> ( columnId, { column | cards = List.map internalMap column.cards } )
+                    \( columnId, column ) ->
+                        ( columnId
+                        , { column | cards = List.map internalMap column.cards }
+                        )
 
                 card =
-                    List.head (List.filter (\( id, _ ) -> id == cardId) (List.concatMap (\( _, column ) -> column.cards) model.columns))
+                    List.concatMap (\( _, column ) -> column.cards) model.columns
+                        |> List.filter (\( id, _ ) -> id == cardId)
+                        |> List.head
             in
             updateSilent
                 { model
@@ -224,7 +229,10 @@ update msg model =
                     \( cardId, card ) -> ( cardId, { card | updating = False } )
 
                 map =
-                    \( columnId, column ) -> ( columnId, { column | cards = List.map internalMap column.cards, updating = False } )
+                    \( columnId, column ) ->
+                        ( columnId
+                        , { column | cards = List.map internalMap column.cards, updating = False }
+                        )
             in
             updateSilent { model | columns = List.map map model.columns, updating = False }
 
@@ -234,13 +242,18 @@ update msg model =
                 internalMap =
                     \( cardId, card ) ->
                         if card.updating then
-                            ( cardId, { card | name = model.newCardName, description = model.newCardDescription, updating = False } )
+                            ( cardId
+                            , { card | name = model.newCardName, description = model.newCardDescription, updating = False }
+                            )
 
                         else
                             ( cardId, card )
 
                 map =
-                    \( columnId, column ) -> ( columnId, { column | cards = List.map internalMap column.cards } )
+                    \( columnId, column ) ->
+                        ( columnId
+                        , { column | cards = List.map internalMap column.cards }
+                        )
             in
             updateSilent { model | columns = List.map map model.columns, updating = False }
 
@@ -264,7 +277,10 @@ update msg model =
                             ( id, { c | dragging = False } )
 
                 map =
-                    \( columnId, column ) -> ( columnId, { column | cards = List.map internalMap column.cards } )
+                    \( columnId, column ) ->
+                        ( columnId
+                        , { column | cards = List.map internalMap column.cards }
+                        )
             in
             updateSilent { model | columns = List.map map model.columns, dragging = True }
 

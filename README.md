@@ -1,7 +1,9 @@
 Elm Kanban
 ==========
 
-This is a Kanban tool, implemented in [Elm](). It's sole purpose is for me to learn how to code in Elm, by building a real-world app, more complex than a simple Todo MVC ;-).
+This is a Kanban tool, implemented in [Elm](https://elm-lang.org/). It's sole purpose is for me to learn how to code in Elm, by building a real-world app, more complex than a simple Todo MVC.
+
+You can see it in action [here](https://wadmiraal.github.io/elm-kanban/).
 
 Build
 -----

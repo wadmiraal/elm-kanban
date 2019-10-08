@@ -4,11 +4,12 @@ import Browser exposing (element)
 import Browser.Events
 import Debug
 import Html exposing (..)
-import Html.Attributes exposing (class, type_, value)
+import Html.Attributes exposing (attribute, class, type_, value)
 import Html.Events exposing (..)
 import Html.Keyed as Keyed
 import Html.Lazy exposing (..)
 import Json.Decode as D
+import List.Extra
 import Markdown
 
 
@@ -27,6 +28,8 @@ main =
 
 type alias Model =
     { columns : List ( Int, Column )
+    , dragging : Bool
+    , dragOverDropId : Maybe ( Int, Int )
     , newCardName : String
     , newCardDescription : String
     , newColumnName : String
@@ -43,14 +46,23 @@ type alias Column =
 
 type alias Card =
     { description : String
+    , dragging : Bool
     , name : String
     , updating : Bool
+    }
+
+
+type alias Position =
+    { x : Int
+    , y : Int
     }
 
 
 init : () -> ( Model, Cmd msg )
 init _ =
     ( { columns = []
+      , dragging = False
+      , dragOverDropId = Nothing
       , newCardName = ""
       , newCardDescription = ""
       , newColumnName = ""
@@ -85,8 +97,13 @@ getNextCardId columns =
 type Msg
     = AddColumn
     | AddCard Int
+    | CancelDragging
     | CancelUpdating
     | DoNothing
+    | DragOverTarget ( Int, Int )
+    | DropCard ( Int, Int )
+    | LeaveDragTarget
+    | MarkCardForDragging Int
     | MarkCardForUpdating Int
     | MarkColumnForUpdating Int
     | StoreCardName String
@@ -235,6 +252,110 @@ update msg model =
         StoreCardDescription description ->
             updateSilent { model | newCardDescription = description }
 
+        -- Mark the card identified by id as being dragged.
+        MarkCardForDragging cardId ->
+            let
+                internalMap =
+                    \( id, c ) ->
+                        if id == cardId then
+                            ( id, { c | dragging = True } )
+
+                        else
+                            ( id, { c | dragging = False } )
+
+                map =
+                    \( columnId, column ) -> ( columnId, { column | cards = List.map internalMap column.cards } )
+            in
+            updateSilent { model | columns = List.map map model.columns, dragging = True }
+
+        -- Drag the card over a droppable zone.
+        DragOverTarget dropId ->
+            updateSilent { model | dragOverDropId = Just dropId }
+
+        LeaveDragTarget ->
+            updateSilent { model | dragOverDropId = Nothing }
+
+        -- Drop the card over a droppable zone.
+        DropCard ( columnId, cardId ) ->
+            let
+                card =
+                    List.concatMap (\( _, column ) -> column.cards) model.columns
+                        |> List.filter (\( _, c ) -> c.dragging)
+                        |> List.head
+
+                columnsWithoutCard =
+                    let
+                        map =
+                            \( id, column ) ->
+                                ( id
+                                , { column | cards = List.filter (\( _, c ) -> c.dragging == False) column.cards }
+                                )
+                    in
+                    List.map map model.columns
+
+                newColumns =
+                    let
+                        map =
+                            \( id, column ) ->
+                                case card of
+                                    -- Failsafe; should never happen.
+                                    Nothing ->
+                                        ( id, column )
+
+                                    Just c ->
+                                        if id == columnId then
+                                            if cardId == -1 then
+                                                -- Add to the beginning of the list.
+                                                ( id
+                                                , { column | cards = c :: column.cards }
+                                                )
+
+                                            else
+                                                -- Add after the card with cardId. Partition the list, and concat them back together with the card between them.
+                                                let
+                                                    ( ids, _ ) =
+                                                        List.unzip column.cards
+
+                                                    split =
+                                                        List.Extra.splitWhen (\id2 -> id2 == cardId) ids
+
+                                                    cards =
+                                                        case split of
+                                                            -- Failsafe; should never happen.
+                                                            Nothing ->
+                                                                column.cards
+
+                                                            Just ( head, _ ) ->
+                                                                let
+                                                                    length =
+                                                                        List.length head + 1
+                                                                in
+                                                                List.take length column.cards ++ [ c ] ++ List.drop length column.cards
+                                                in
+                                                ( id
+                                                , { column
+                                                    | cards = cards
+                                                  }
+                                                )
+
+                                        else
+                                            ( id, column )
+                    in
+                    List.map map columnsWithoutCard
+            in
+            updateSilent { model | columns = newColumns, dragOverDropId = Nothing }
+
+        -- Cancel the dragging of a card or column.
+        CancelDragging ->
+            let
+                internalMap =
+                    \( cardId, card ) -> ( cardId, { card | dragging = False } )
+
+                map =
+                    \( columnId, column ) -> ( columnId, { column | cards = List.map internalMap column.cards } )
+            in
+            updateSilent { model | columns = List.map map model.columns, dragging = False }
+
         -- Don't do anything. Used in subscriptions.
         DoNothing ->
             updateSilent model
@@ -251,7 +372,7 @@ newColumn =
 -}
 newCard : Card
 newCard =
-    { name = "New card", description = "", updating = False }
+    { name = "New card", description = "", dragging = False, updating = False }
 
 
 
@@ -261,30 +382,23 @@ newCard =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     if model.updating then
-        Browser.Events.onKeyDown cancelOnEsc
+        let
+            isEsc =
+                \keyValue ->
+                    case keyValue of
+                        "Escape" ->
+                            CancelUpdating
+
+                        _ ->
+                            DoNothing
+
+            pressedKey =
+                D.field "key" D.string
+        in
+        Browser.Events.onKeyDown (D.map isEsc pressedKey)
 
     else
         Sub.none
-
-
-{-| Even handler. Trigger a "cancel update" message if the Esc key is pressed.
--}
-cancelOnEsc : D.Decoder Msg
-cancelOnEsc =
-    let
-        isEsc =
-            \keyValue ->
-                case keyValue of
-                    "Escape" ->
-                        CancelUpdating
-
-                    _ ->
-                        DoNothing
-
-        pressedKey =
-            D.field "key" D.string
-    in
-    D.map isEsc pressedKey
 
 
 
@@ -321,10 +435,17 @@ viewColumn model item =
     let
         ( id, column ) =
             item
+
+        dropTarget =
+            if model.dragging then
+                ( "1st-drop-target", viewCardDropTarget ( id, -1 ) model )
+
+            else
+                ( "1st-drop-target", text "" )
     in
     div [ class "column" ]
         [ viewColumnHeader model item
-        , Keyed.node "div" [ class "column__cards" ] (List.map (viewKeyedCard model) column.cards)
+        , Keyed.node "div" [ class "column__cards" ] (dropTarget :: List.map (viewKeyedCard model id) column.cards)
         , button [ class "column__add-card", onClick (AddCard id) ] [ text "Add new card" ]
         ]
 
@@ -355,37 +476,142 @@ viewColumnHeader model item =
 {-| Wrapper function around `viewCard`. Adds support for both Html.Keyed and
 Html.Lazy for performance optimization.
 -}
-viewKeyedCard : Model -> ( Int, Card ) -> ( String, Html Msg )
-viewKeyedCard model item =
+viewKeyedCard : Model -> Int -> ( Int, Card ) -> ( String, Html Msg )
+viewKeyedCard model columnId item =
     let
         ( id, _ ) =
             item
     in
     ( String.fromInt id
-    , lazy2 viewCard model item
+    , lazy3 viewCard model columnId item
     )
 
 
-viewCard : Model -> ( Int, Card ) -> Html Msg
-viewCard model ( id, card ) =
-    if card.updating then
-        div [ class "card card--updating" ]
-            [ form [ onSubmit UpdateCard ]
-                [ div [ class "card__name" ]
-                    [ input [ type_ "text", value model.newCardName, onInput StoreCardName ] []
-                    ]
-                , div [ class "card__description" ]
-                    [ textarea [ onInput StoreCardDescription ] [ text model.newCardDescription ]
-                    ]
-                , button [ type_ "submit" ] [ text "Update" ]
-                , span [ class "cancel-link", onClick CancelUpdating ] [ text "Cancel" ]
-                ]
-            ]
+viewCard : Model -> Int -> ( Int, Card ) -> Html Msg
+viewCard model columnId ( id, card ) =
+    let
+        dropId =
+            ( columnId, id )
 
-    else
-        div [ class "card", onClick (MarkCardForUpdating id) ]
-            [ div [ class "card__name" ]
-                [ h3 [] [ text card.name ]
-                ]
-            , div [ class "card__description" ] (Markdown.toHtml Nothing card.description)
-            ]
+        dropTarget =
+            if model.dragging && not card.dragging then
+                -- A card cannot be dragged to its own position... Too complicated.
+                viewCardDropTarget dropId model
+
+            else
+                text ""
+
+        cardNode =
+            if card.updating then
+                div [ class "card card--updating" ]
+                    [ form [ onSubmit UpdateCard ]
+                        [ div [ class "card__name" ]
+                            [ input [ type_ "text", value model.newCardName, onInput StoreCardName ] []
+                            ]
+                        , div [ class "card__description" ]
+                            [ textarea [ onInput StoreCardDescription ] [ text model.newCardDescription ]
+                            ]
+                        , button [ type_ "submit" ] [ text "Update" ]
+                        , span [ class "cancel-link", onClick CancelUpdating ] [ text "Cancel" ]
+                        ]
+                    ]
+
+            else if card.dragging then
+                div [ class "card card--dragging", attribute "draggable" "true", onDragEnd CancelDragging ]
+                    [ div [ class "card__name" ]
+                        [ h3 [] [ text card.name ]
+                        ]
+                    , div [ class "card__description" ] (Markdown.toHtml Nothing card.description)
+                    ]
+
+            else
+                div [ class "card", attribute "draggable" "true", onDragStart (MarkCardForDragging id) ]
+                    [ div [ class "card__name", onClick (MarkCardForUpdating id) ]
+                        [ h3 [] [ text card.name ]
+                        ]
+                    , div [ class "card__description", onClick (MarkCardForUpdating id) ] (Markdown.toHtml Nothing card.description)
+                    ]
+    in
+    div []
+        [ cardNode
+        , dropTarget
+        ]
+
+
+viewCardDropTarget : ( Int, Int ) -> Model -> Html Msg
+viewCardDropTarget dropId model =
+    let
+        baseClass =
+            "card-drop-target"
+
+        classList =
+            case model.dragOverDropId of
+                Nothing ->
+                    baseClass
+
+                Just currDropId ->
+                    if currDropId == dropId then
+                        baseClass ++ " card-drop-target--hovering"
+
+                    else
+                        baseClass
+    in
+    div
+        [ class classList
+        , attribute "droppable" "true"
+        , onDragEnter (DragOverTarget dropId)
+        , onDragLeave LeaveDragTarget
+        , onDragOver DoNothing
+        , onDrop (DropCard dropId)
+        ]
+        []
+
+
+onDragEnter : Msg -> Attribute Msg
+onDragEnter msg =
+    custom "dragenter" <|
+        D.succeed
+            { message = msg
+            , stopPropagation = True
+            , preventDefault = True
+            }
+
+
+onDragLeave : Msg -> Attribute Msg
+onDragLeave msg =
+    custom "dragleave" <|
+        D.succeed
+            { message = msg
+            , stopPropagation = True
+            , preventDefault = True
+            }
+
+
+onDragOver : Msg -> Attribute Msg
+onDragOver msg =
+    custom "dragover" <|
+        D.succeed
+            { message = msg
+            , stopPropagation = True
+            , preventDefault = True
+            }
+
+
+onDragStart : Msg -> Attribute Msg
+onDragStart msg =
+    on "dragstart" (D.succeed msg)
+
+
+onDragEnd : Msg -> Attribute Msg
+onDragEnd msg =
+    on "dragend" (D.succeed msg)
+
+
+onDrop : Msg -> Attribute Msg
+onDrop msg =
+    custom "drop" <|
+        D.succeed
+            { message = msg
+            , stopPropagation = True
+            , preventDefault = True
+            }

@@ -1,4 +1,4 @@
-module Main exposing (main)
+port module Main exposing (main)
 
 import Browser exposing (element)
 import Browser.Events
@@ -11,6 +11,11 @@ import Html.Lazy exposing (..)
 import Json.Decode as D
 import List.Extra
 import Markdown
+
+
+{-| Firefox has an issue. We need to manipulate the drag event via a port for it to work.
+-}
+port dragstart : D.Value -> Cmd msg
 
 
 main =
@@ -103,7 +108,7 @@ type Msg
     | DragOverTarget ( Int, Int )
     | DropCard ( Int, Int )
     | LeaveDragTarget
-    | MarkCardForDragging Int
+    | MarkCardForDragging Int D.Value
     | MarkCardForUpdating Int
     | MarkColumnForUpdating Int
     | StoreCardName String
@@ -266,7 +271,7 @@ update msg model =
             updateSilent { model | newCardDescription = description }
 
         -- Mark the card identified by id as being dragged.
-        MarkCardForDragging cardId ->
+        MarkCardForDragging cardId event ->
             let
                 internalMap =
                     \( id, c ) ->
@@ -282,7 +287,9 @@ update msg model =
                         , { column | cards = List.map internalMap column.cards }
                         )
             in
-            updateSilent { model | columns = List.map map model.columns, dragging = True }
+            ( { model | columns = List.map map model.columns, dragging = True }
+            , dragstart event
+            )
 
         -- Drag the card over a droppable zone.
         DragOverTarget dropId ->
@@ -613,9 +620,9 @@ onDragOver msg =
             }
 
 
-onDragStart : Msg -> Attribute Msg
+onDragStart : (D.Value -> Msg) -> Attribute Msg
 onDragStart msg =
-    on "dragstart" (D.succeed msg)
+    on "dragstart" (D.map msg D.value)
 
 
 onDragEnd : Msg -> Attribute Msg

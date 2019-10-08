@@ -10,6 +10,10 @@
     <div id="app"></div>
     <script>
       var app = Elm.Main.init({ node: document.getElementById("app") });
+      // Firefox has an issue. We need to update the event for the dragging to work.
+      app.ports.dragstart.subscribe(function(event) {
+        event.dataTransfer.setData("text", "");
+      });
     </script>
   </body>
 </html>

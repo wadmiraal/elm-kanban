@@ -104,8 +104,8 @@ type Msg
     | DragOverTarget ( Int, Int )
     | DropCard ( Int, Int )
     | LeaveDragTarget
-    | MarkCardForDragging Int D.Value
-    | MarkCardForUpdating Int
+    | MarkCardForDragging ( Int, Int ) D.Value
+    | MarkCardForUpdating ( Int, Int )
     | MarkColumnForUpdating Int
     | StoreCardName String
     | StoreCardDescription String
@@ -120,6 +120,10 @@ update msg model =
         updateSilent =
             \m ->
                 ( m, Cmd.none )
+
+        updateDragStart =
+            \m e ->
+                ( m, dragstart e )
     in
     case msg of
         AddColumn ->
@@ -182,7 +186,7 @@ update msg model =
             updateSilent { model | newColumnName = name }
 
         -- Mark the card identified by id as being updated. Store its name and description as the default values.
-        MarkCardForUpdating cardId ->
+        MarkCardForUpdating ( columnId, cardId ) ->
             let
                 internalMap =
                     \c ->
@@ -194,7 +198,11 @@ update msg model =
 
                 map =
                     \column ->
-                        { column | cards = List.map internalMap column.cards }
+                        if column.id == columnId then
+                            { column | cards = List.map internalMap column.cards }
+
+                        else
+                            column
 
                 card =
                     List.concatMap (\column -> column.cards) model.columns
@@ -259,7 +267,7 @@ update msg model =
             updateSilent { model | newCardDescription = description }
 
         -- Mark the card identified by id as being dragged.
-        MarkCardForDragging cardId event ->
+        MarkCardForDragging ( columnId, cardId ) event ->
             let
                 internalMap =
                     \card ->
@@ -271,11 +279,13 @@ update msg model =
 
                 map =
                     \column ->
-                        { column | cards = List.map internalMap column.cards }
+                        if column.id == columnId then
+                            { column | cards = List.map internalMap column.cards }
+
+                        else
+                            column
             in
-            ( { model | columns = List.map map model.columns, dragging = True }
-            , dragstart event
-            )
+            updateDragStart { model | columns = List.map map model.columns, dragging = True } event
 
         -- Drag the card over a droppable zone.
         DragOverTarget dropId ->
@@ -285,7 +295,7 @@ update msg model =
             updateSilent { model | dragOverDropId = Nothing }
 
         -- Drop the card over a droppable zone.
-        DropCard ( columnId, cardId ) ->
+        DropCard ( columnId, targetCardId ) ->
             let
                 droppedCard =
                     List.concatMap (\column -> column.cards) model.columns
@@ -304,43 +314,34 @@ update msg model =
                     let
                         map =
                             \column ->
-                                case droppedCard of
-                                    -- Failsafe; should never happen.
-                                    Nothing ->
-                                        column
+                                if column.id == columnId then
+                                    case droppedCard of
+                                        -- Failsafe; should never happen. If it does, simply leave the column untouched.
+                                        Nothing ->
+                                            column
 
-                                    Just card ->
-                                        if column.id == columnId then
-                                            if cardId == -1 then
+                                        Just card ->
+                                            if targetCardId == -1 then
                                                 -- Add to the beginning of the list.
                                                 { column | cards = card :: column.cards }
 
                                             else
-                                                -- Add after the card with cardId. Partition the list, and concat them back together with the card between them.
+                                                -- Add after the card with targetCardId. Partition the list, and concat them back together with the card between them.
                                                 let
-                                                    ids =
-                                                        List.map (\c -> c.id) column.cards
-
-                                                    split =
-                                                        List.Extra.splitWhen (\id2 -> id2 == cardId) ids
+                                                    ( head, _ ) =
+                                                        Maybe.withDefault ( [], [] ) (List.Extra.splitWhen (\c -> c.id == targetCardId) column.cards)
 
                                                     cards =
-                                                        case split of
-                                                            -- Failsafe; should never happen.
-                                                            Nothing ->
-                                                                column.cards
-
-                                                            Just ( head, _ ) ->
-                                                                let
-                                                                    length =
-                                                                        List.length head + 1
-                                                                in
-                                                                List.take length column.cards ++ [ card ] ++ List.drop length column.cards
+                                                        let
+                                                            length =
+                                                                List.length head + 1
+                                                        in
+                                                        List.take length column.cards ++ [ card ] ++ List.drop length column.cards
                                                 in
                                                 { column | cards = cards }
 
-                                        else
-                                            column
+                                else
+                                    column
                     in
                     List.map map columnsWithoutCard
             in
@@ -357,7 +358,7 @@ update msg model =
             in
             updateSilent { model | columns = List.map map model.columns, dragging = False }
 
-        -- Don't do anything. Used in subscriptions.
+        -- Don't do anything.
         DoNothing ->
             updateSilent model
 
@@ -476,13 +477,13 @@ viewKeyedCard model columnId card =
 viewCard : Model -> Int -> Card -> Html Msg
 viewCard model columnId card =
     let
-        dropId =
+        id =
             ( columnId, card.id )
 
         dropTarget =
             if model.dragging && not card.dragging then
                 -- A card cannot be dragged to its own position... Too complicated.
-                viewCardDropTarget dropId model
+                viewCardDropTarget id model
 
             else
                 text ""
@@ -511,11 +512,11 @@ viewCard model columnId card =
                     ]
 
             else
-                div [ class "card", attribute "draggable" "true", onDragStart (MarkCardForDragging card.id) ]
-                    [ div [ class "card__name", onClick (MarkCardForUpdating card.id) ]
+                div [ class "card", attribute "draggable" "true", onDragStart (MarkCardForDragging id) ]
+                    [ div [ class "card__name", onClick (MarkCardForUpdating id) ]
                         [ h3 [] [ text card.name ]
                         ]
-                    , div [ class "card__description", onClick (MarkCardForUpdating card.id) ] (Markdown.toHtml Nothing card.description)
+                    , div [ class "card__description", onClick (MarkCardForUpdating id) ] (Markdown.toHtml Nothing card.description)
                     ]
     in
     div []

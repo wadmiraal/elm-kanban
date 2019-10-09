@@ -8,11 +8,13 @@ You can see it in action [here](https://wadmiraal.github.io/elm-kanban/index.htm
 Build
 -----
 
-Requires [Uglify JS](https://www.npmjs.com/package/uglify-js). Simply call:
+Requires [Uglify JS](https://www.npmjs.com/package/uglify-js).
+
+Simply call:
 
 ```bash
-./compile-and-optimize.sh
+./build.sh
 ```
 
-This will compile Elm, optimize it, and finally use UglifyJS' aggressive mangling to make the final file super light. See the official [Elm guide](https://guide.elm-lang.org/optimization/asset_size.html).
+This will compile Elm, optimize it, and finally use UglifyJS' aggressive mangling to make the final file super light. See the official [Elm guide](https://guide.elm-lang.org/optimization/asset_size.html) for more information on optimizing Elm assets.
 

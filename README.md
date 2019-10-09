@@ -1,14 +1,12 @@
 Elm Kanban [![Build Status](https://travis-ci.org/wadmiraal/elm-kanban.svg?branch=master)](https://travis-ci.org/wadmiraal/elm-kanban)
 ==========
 
-This is a Kanban tool, implemented in [Elm](https://elm-lang.org/). It's sole purpose is for me to learn how to code in Elm, by building a real-world app, more complex than a simple Todo MVC.
+This is a Kanban tool, implemented in [Elm](https://elm-lang.org/). It's sole purpose is for me to learn how to code in Elm, by building a real-world app that is more complex than a simple Todo app.
 
 You can see it in action [here](https://wadmiraal.github.io/elm-kanban/index.html).
 
 Build
 -----
-
-Requires [Uglify JS](https://www.npmjs.com/package/uglify-js).
 
 Simply call:
 

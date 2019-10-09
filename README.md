@@ -1,4 +1,4 @@
-Elm Kanban
+Elm Kanban [![Build Status](https://travis-ci.org/wadmiraal/elm-kanban.svg?branch=master)](https://travis-ci.org/wadmiraal/elm-kanban)
 ==========
 
 This is a Kanban tool, implemented in [Elm](https://elm-lang.org/). It's sole purpose is for me to learn how to code in Elm, by building a real-world app, more complex than a simple Todo MVC.

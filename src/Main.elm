@@ -14,7 +14,7 @@ import Browser exposing (element)
 import Browser.Events
 import Debug
 import Html exposing (..)
-import Html.Attributes exposing (attribute, class, classList, type_, value)
+import Html.Attributes exposing (attribute, class, classList, required, type_, value)
 import Html.Events exposing (..)
 import Html.Keyed as Keyed
 import Html.Lazy exposing (..)
@@ -658,7 +658,7 @@ viewColumn model column =
                 [ if column.updating then
                     div [ class "column__name column__name--updating" ]
                         [ form [ onSubmit UpdateColumn ]
-                            [ input [ type_ "text", value model.newColumnName, onInput StoreColumnName ] []
+                            [ input [ type_ "text", required True, value model.newColumnName, onInput StoreColumnName ] []
                             , button [ type_ "submit" ] [ text "Update" ]
                             , span [ class "cancel-link", onClick CancelUpdating ] [ text "Cancel" ]
                             ]
@@ -712,7 +712,7 @@ viewCard model columnId card =
         div [ class "card card--updating" ]
             [ form [ onSubmit UpdateCard ]
                 [ div [ class "card__name" ]
-                    [ input [ type_ "text", value model.newCardName, onInput StoreCardName ] []
+                    [ input [ type_ "text", required True, value model.newCardName, onInput StoreCardName ] []
                     ]
                 , div [ class "card__description" ]
                     [ textarea [ onInput StoreCardDescription ] [ text model.newCardDescription ]

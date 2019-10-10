@@ -584,10 +584,10 @@ subscriptions model =
 view : Model -> Html Msg
 view model =
     let
-        columns =
+        columnNodes =
             List.map (viewKeyedColumn model) model.columns
 
-        columnNodes =
+        columnNodesWithTargets =
             if model.draggingColumn then
                 let
                     dropTargets =
@@ -600,17 +600,22 @@ view model =
                                 )
                                 model.columns
                 in
-                List.Extra.interweave dropTargets columns
+                List.Extra.interweave dropTargets columnNodes
 
             else
-                columns
+                columnNodes
+
+        children =
+            columnNodesWithTargets
+                ++ [ ( "add"
+                     , div [ class "column column--add-new" ]
+                        [ button [ onClick AddColumn ] [ text "+ Add new column" ]
+                        ]
+                     )
+                   ]
     in
     div []
-        [ Keyed.node "div"
-            [ class "columns" ]
-            (columnNodes
-                ++ [ ( "add", div [ class "column column--add-new" ] [ button [ onClick AddColumn ] [ text "+ Add new column" ] ] ) ]
-            )
+        [ Keyed.node "div" [ class "columns" ] children
         ]
 
 
@@ -627,10 +632,10 @@ viewKeyedColumn model column =
 viewColumn : Model -> Column -> Html Msg
 viewColumn model column =
     let
-        cards =
+        cardNodes =
             List.map (viewKeyedCard model column.id) column.cards
 
-        cardNodes =
+        cardNodesWithTargets =
             if model.draggingCard then
                 let
                     dropTargets =
@@ -643,47 +648,47 @@ viewColumn model column =
                                 )
                                 column.cards
                 in
-                List.Extra.interweave dropTargets cards
+                List.Extra.interweave dropTargets cardNodes
 
             else
-                cards
+                cardNodes
+
+        columnHeader =
+            div [ class "column__header" ]
+                [ if column.updating then
+                    div [ class "column__name column__name--updating" ]
+                        [ form [ onSubmit UpdateColumn ]
+                            [ input [ type_ "text", value model.newColumnName, onInput StoreColumnName ] []
+                            , button [ type_ "submit" ] [ text "Update" ]
+                            , span [ class "cancel-link", onClick CancelUpdating ] [ text "Cancel" ]
+                            ]
+                        ]
+
+                  else if column.dragging then
+                    div [ class "column__name" ]
+                        [ h2 [] [ text column.name ]
+                        ]
+
+                  else
+                    div [ class "column__name", onClick (MarkColumnForUpdating column.id) ]
+                        [ h2 [] [ text column.name ]
+                        ]
+                ]
+
+        columnWrappingDiv =
+            if column.dragging then
+                div [ class "column column--dragging", attribute "draggable" "true", onDragEnd CancelDragging ]
+
+            else if column.updating then
+                div [ class "column" ]
+
+            else
+                div [ class "column", attribute "draggable" "true", onDragStart (MarkColumnForDragging column.id) ]
     in
-    if column.dragging then
-        div [ class "column column--dragging", attribute "draggable" "true", onDragEnd CancelDragging ]
-            [ viewColumnHeader model column
-            , Keyed.node "div" [ class "column__cards" ] cardNodes
-            , button [ class "column__add-card", onClick (AddCard column.id) ] [ text "Add new card" ]
-            ]
-
-    else
-        div [ class "column", attribute "draggable" "true", onDragStart (MarkColumnForDragging column.id) ]
-            [ viewColumnHeader model column
-            , Keyed.node "div" [ class "column__cards" ] cardNodes
-            , button [ class "column__add-card", onClick (AddCard column.id) ] [ text "Add new card" ]
-            ]
-
-
-viewColumnHeader : Model -> Column -> Html Msg
-viewColumnHeader model column =
-    div [ class "column__header" ]
-        [ if column.updating then
-            div [ class "column__name column__name--updating" ]
-                [ form [ onSubmit UpdateColumn ]
-                    [ input [ type_ "text", value model.newColumnName, onInput StoreColumnName ] []
-                    , button [ type_ "submit" ] [ text "Update" ]
-                    , span [ class "cancel-link", onClick CancelUpdating ] [ text "Cancel" ]
-                    ]
-                ]
-
-          else if column.dragging then
-            div [ class "column__name" ]
-                [ h2 [] [ text column.name ]
-                ]
-
-          else
-            div [ class "column__name", onClick (MarkColumnForUpdating column.id) ]
-                [ h2 [] [ text column.name ]
-                ]
+    columnWrappingDiv
+        [ columnHeader
+        , Keyed.node "div" [ class "column__cards" ] cardNodesWithTargets
+        , button [ class "column__add-card", onClick (AddCard column.id) ] [ text "Add new card" ]
         ]
 
 

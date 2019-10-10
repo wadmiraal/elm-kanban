@@ -78,6 +78,12 @@ button:hover {
   border-radius: 5px;
 
   background: #eee;
+
+  cursor: grab;
+}
+
+.column--dragging {
+  opacity: 0.5;
 }
 
 .column--add-new {
@@ -100,6 +106,8 @@ button:hover {
 
   font-size: 1.2em;
   color: #777;
+
+  cursor: pointer;
 }
 
 .column--add-new button:hover {
@@ -209,11 +217,8 @@ button:hover {
   cursor: inherit;
 }
 
-.card-drop-target {
-  margin-bottom: 5px;
-  margin-top: -5px;
-  height: 10px;
-
+/* Drag and drop */
+.drop-target {
   background-color: transparent;
 
   border-style: dashed;
@@ -221,11 +226,29 @@ button:hover {
   border-width: 3px;
   border-radius: 5px;
 
-  transition: height 0.2s, background-color 0.2s;
+  transition: height 0.2s, width 0.2s, background-color 0.2s;
 }
 
-.card-drop-target--hovering {
-  height: 80px;
-
+.drop-target--hovering {
   background-color: rgba(255, 255, 255, 0.5);
+}
+
+.drop-target--column {
+  margin-right: 5px;
+  margin-left: -5px;
+  width: 10px;
+}
+
+.drop-target--column.drop-target--hovering {
+  width: 230px;
+}
+
+.drop-target--card {
+  margin-bottom: 5px;
+  margin-top: -5px;
+  height: 10px;
+}
+
+.drop-target--card.drop-target--hovering {
+  height: 80px;
 }

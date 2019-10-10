@@ -14,7 +14,7 @@ import Browser exposing (element)
 import Browser.Events
 import Debug
 import Html exposing (..)
-import Html.Attributes exposing (attribute, class, type_, value)
+import Html.Attributes exposing (attribute, class, classList, type_, value)
 import Html.Events exposing (..)
 import Html.Keyed as Keyed
 import Html.Lazy exposing (..)
@@ -742,23 +742,19 @@ viewCard model columnId card =
 viewColumnDropTarget : Int -> Model -> Html Msg
 viewColumnDropTarget dropId model =
     let
-        baseClass =
-            "drop-target drop-target--column"
-
-        classList =
+        hovering =
             case model.dragColumnOverDropId of
                 Nothing ->
-                    baseClass
+                    False
 
                 Just currDropId ->
-                    if currDropId == dropId then
-                        baseClass ++ " drop-target--hovering"
-
-                    else
-                        baseClass
+                    dropId == currDropId
     in
     div
-        [ class classList
+        [ classList
+            [ ( "drop-target drop-target--column", True )
+            , ( "drop-target--hovering", hovering )
+            ]
         , onDragLeave DragColumnOutOfTarget
         , attribute "droppable" "true"
         , onDragEnter (DragColumnOverTarget dropId)
@@ -771,23 +767,19 @@ viewColumnDropTarget dropId model =
 viewCardDropTarget : ( Int, Int ) -> Model -> Html Msg
 viewCardDropTarget dropId model =
     let
-        baseClass =
-            "drop-target drop-target--card"
-
-        classList =
+        hovering =
             case model.dragCardOverDropId of
                 Nothing ->
-                    baseClass
+                    False
 
                 Just currDropId ->
-                    if currDropId == dropId then
-                        baseClass ++ " drop-target--hovering"
-
-                    else
-                        baseClass
+                    dropId == currDropId
     in
     div
-        [ class classList
+        [ classList
+            [ ( "drop-target drop-target--card", True )
+            , ( "drop-target--hovering", hovering )
+            ]
         , onDragLeave DragCardOutOfTarget
         , attribute "droppable" "true"
         , onDragEnter (DragCardOverTarget dropId)

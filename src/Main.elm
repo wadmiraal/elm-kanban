@@ -19,6 +19,8 @@ import Html.Events exposing (..)
 import Html.Keyed as Keyed
 import Html.Lazy exposing (..)
 import Json.Decode as D
+import Json.Decode.Pipeline as Pipeline
+import Json.Encode as E
 import List.Extra
 import Markdown
 
@@ -28,12 +30,16 @@ import Markdown
 -- We require ports to communicate with JavaScript, in order to use APIs that
 -- Elm doesn't support yet.
 --
--- We have 3 ports:
+-- We have 2 ports:
 --
 -- 1.  A port to write data to the browser's localStorage.
--- 2.  A port to read data from the browser's localStorage.
--- 3.  A port to interact with a ondragstart event in Firefox. This is needed to
+-- 2.  A port to interact with a ondragstart event in Firefox. This is needed to
 --     make the HTML5 drag and drop API work in Firefox.
+
+
+{-| Send data to JS for storage.
+-}
+port store : String -> Cmd msg
 
 
 {-| Firefox has an issue with the new HTML5 drag and drop API. We need to
@@ -125,18 +131,31 @@ type alias Card =
     }
 
 
-init : () -> ( Model, Cmd msg )
-init _ =
-    ( { columns = []
-      , draggingCard = False
-      , draggingColumn = False
-      , dragCardOverDropId = Nothing
-      , dragColumnOverDropId = Nothing
-      , newCardName = ""
-      , newCardDescription = ""
-      , newColumnName = ""
-      , updating = False
-      }
+init : Maybe String -> ( Model, Cmd msg )
+init flags =
+    let
+        defaultModel =
+            { columns = []
+            , draggingCard = False
+            , draggingColumn = False
+            , dragCardOverDropId = Nothing
+            , dragColumnOverDropId = Nothing
+            , newCardName = ""
+            , newCardDescription = ""
+            , newColumnName = ""
+            , updating = False
+            }
+
+        model =
+            case flags of
+                Nothing ->
+                    defaultModel
+
+                Just data ->
+                    D.decodeString modelDecoder data
+                        |> Result.withDefault defaultModel
+    in
+    ( model
     , Cmd.none
     )
 
@@ -163,6 +182,81 @@ getNextCardId columns =
             List.concatMap (\column -> column.cards) columns
     in
     getNextId allCards
+
+
+{-| Encoder function. Encode the current model to a representation we can store.
+We don't just store the whole model, as a snapshot. We only store what is
+relevant.
+-}
+modelEncoder : Model -> E.Value
+modelEncoder model =
+    let
+        cardEncoder =
+            \card ->
+                E.object
+                    [ ( "id", E.int card.id )
+                    , ( "name", E.string card.name )
+                    , ( "description", E.string card.description )
+                    ]
+
+        columnEncoder =
+            \column ->
+                E.object
+                    [ ( "id", E.int column.id )
+                    , ( "name", E.string column.name )
+                    , ( "cards", E.list identity (List.map cardEncoder column.cards) )
+                    ]
+    in
+    E.object
+        [ ( "columns", E.list identity (List.map columnEncoder model.columns) )
+        , ( "schemaVersion", E.string "1.0" )
+        ]
+
+
+{-| Decoder function. Decodes the given JSON data to extract the information,
+and construct a model which will serve as the initial app state.
+-}
+modelDecoder : D.Decoder Model
+modelDecoder =
+    let
+        cardDecoder =
+            D.succeed Card
+                |> Pipeline.required "description" D.string
+                -- dragging
+                |> Pipeline.hardcoded False
+                |> Pipeline.required "id" D.int
+                |> Pipeline.required "name" D.string
+                -- updating
+                |> Pipeline.hardcoded False
+
+        columnDecoder =
+            D.succeed Column
+                |> Pipeline.required "cards" (D.list cardDecoder)
+                -- dragging
+                |> Pipeline.hardcoded False
+                |> Pipeline.required "id" D.int
+                |> Pipeline.required "name" D.string
+                -- updating
+                |> Pipeline.hardcoded False
+    in
+    D.succeed Model
+        |> Pipeline.required "columns" (D.list columnDecoder)
+        -- draggingCard
+        |> Pipeline.hardcoded False
+        -- draggingColumn
+        |> Pipeline.hardcoded False
+        -- dragCardOverDropId
+        |> Pipeline.hardcoded Nothing
+        -- dragColumnOverDropId
+        |> Pipeline.hardcoded Nothing
+        -- newCardDescription
+        |> Pipeline.hardcoded ""
+        -- newCardName
+        |> Pipeline.hardcoded ""
+        -- newColumnName
+        |> Pipeline.hardcoded ""
+        -- updating
+        |> Pipeline.hardcoded False
 
 
 
@@ -201,6 +295,15 @@ update msg model =
             \m ->
                 ( m, Cmd.none )
 
+        -- Helper function to persist the model in a store.
+        updatePersist =
+            \m ->
+                ( m
+                , modelEncoder m
+                    |> E.encode 0
+                    |> store
+                )
+
         -- Helper function for using ondragstart events in Firefox. Use the
         -- `dragstart` port to manipulate the event.
         updateDragStart =
@@ -212,7 +315,7 @@ update msg model =
         -- Adding new data:
         ------------------------------------------------------------------------
         AddColumn ->
-            updateSilent { model | columns = model.columns ++ [ newColumn (getNextId model.columns) "New column" ] }
+            updatePersist { model | columns = model.columns ++ [ newColumn (getNextId model.columns) "New column" ] }
 
         AddCard columnId ->
             let
@@ -224,7 +327,7 @@ update msg model =
                         else
                             column
             in
-            updateSilent { model | columns = List.map map model.columns }
+            updatePersist { model | columns = List.map map model.columns }
 
         ------------------------------------------------------------------------
         -- Updating column name:
@@ -262,7 +365,7 @@ update msg model =
                         else
                             column
             in
-            updateSilent { model | columns = List.map map model.columns, updating = False }
+            updatePersist { model | columns = List.map map model.columns, updating = False }
 
         StoreColumnName name ->
             updateSilent { model | newColumnName = name }
@@ -317,7 +420,7 @@ update msg model =
                     \column ->
                         { column | cards = List.map internalMap column.cards }
             in
-            updateSilent { model | columns = List.map map model.columns, updating = False }
+            updatePersist { model | columns = List.map map model.columns, updating = False }
 
         StoreCardName name ->
             updateSilent { model | newCardName = name }
@@ -374,7 +477,7 @@ update msg model =
                         in
                         if targetColumnId == -1 then
                             -- Add to the beginning of the list.
-                            updateSilent
+                            updatePersist
                                 { model
                                     | dragColumnOverDropId = Nothing
                                     , columns = column :: columnsWithoutDraggedColumn
@@ -396,7 +499,7 @@ update msg model =
                                 newColumns =
                                     List.take length columnsWithoutDraggedColumn ++ [ column ] ++ List.drop length columnsWithoutDraggedColumn
                             in
-                            updateSilent
+                            updatePersist
                                 { model
                                     | dragColumnOverDropId = Nothing
                                     , columns = newColumns
@@ -498,7 +601,7 @@ update msg model =
                                 in
                                 List.map map columnsWithoutCard
                         in
-                        updateSilent { model | columns = newColumns, dragCardOverDropId = Nothing }
+                        updatePersist { model | columns = newColumns, dragCardOverDropId = Nothing }
 
         ------------------------------------------------------------------------
         -- Misc:

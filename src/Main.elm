@@ -11,10 +11,11 @@
 port module Main exposing (main)
 
 import Browser exposing (element)
+import Browser.Dom
 import Browser.Events
 import Debug
 import Html exposing (..)
-import Html.Attributes exposing (attribute, class, classList, required, type_, value)
+import Html.Attributes exposing (attribute, class, classList, required, title, type_, value)
 import Html.Events exposing (..)
 import Html.Keyed as Keyed
 import Html.Lazy exposing (..)
@@ -23,6 +24,7 @@ import Json.Decode.Pipeline as Pipeline
 import Json.Encode as E
 import List.Extra
 import Markdown
+import Task
 
 
 
@@ -276,9 +278,9 @@ type Msg
     | DropCard ( Int, Int )
     | DropColumn Int
     | MarkCardForDragging ( Int, Int ) D.Value
-    | MarkCardForUpdating ( Int, Int )
+    | MarkCardForUpdating ( Int, Int ) String
     | MarkColumnForDragging Int D.Value
-    | MarkColumnForUpdating Int
+    | MarkColumnForUpdating Int String
     | StoreCardName String
     | StoreCardDescription String
     | StoreColumnName String
@@ -286,7 +288,7 @@ type Msg
     | UpdateColumn
 
 
-update : Msg -> Model -> ( Model, Cmd msg )
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     let
         -- Helper function to "silently" update the model. Simply dispatches
@@ -309,6 +311,12 @@ update msg model =
         updateDragStart =
             \m e ->
                 ( m, dragstart e )
+
+        -- Helper function for focusing an input field. This needs to
+        -- "broadcast" another message, for which we simply use `DoNothing`.
+        updateAndFocus =
+            \m domId ->
+                ( m, Task.attempt (always DoNothing) (Browser.Dom.focus domId) )
     in
     case msg of
         ------------------------------------------------------------------------
@@ -332,7 +340,7 @@ update msg model =
         ------------------------------------------------------------------------
         -- Updating column name:
         ------------------------------------------------------------------------
-        MarkColumnForUpdating columnId ->
+        MarkColumnForUpdating columnId domId ->
             let
                 map =
                     \c ->
@@ -348,12 +356,13 @@ update msg model =
                         -- Provide a default, although it should never happen.
                         |> Maybe.withDefault (newColumn 0 "")
             in
-            updateSilent
+            updateAndFocus
                 { model
                     | columns = List.map map model.columns
                     , newColumnName = column.name
                     , updating = True
                 }
+                domId
 
         UpdateColumn ->
             let
@@ -373,7 +382,7 @@ update msg model =
         ------------------------------------------------------------------------
         -- Updating card name and description:
         ------------------------------------------------------------------------
-        MarkCardForUpdating ( columnId, cardId ) ->
+        MarkCardForUpdating ( columnId, cardId ) domId ->
             let
                 internalMap =
                     \c ->
@@ -398,13 +407,14 @@ update msg model =
                         -- Provide a default, although it should never happen.
                         |> Maybe.withDefault (newCard 0 "")
             in
-            updateSilent
+            updateAndFocus
                 { model
                     | columns = List.map map model.columns
                     , newCardName = card.name
                     , newCardDescription = card.description
                     , updating = True
                 }
+                domId
 
         UpdateCard ->
             let
@@ -761,7 +771,7 @@ viewColumn model column =
                 [ if column.updating then
                     div [ class "column__name column__name--updating" ]
                         [ form [ onSubmit UpdateColumn ]
-                            [ input [ type_ "text", required True, value model.newColumnName, onInput StoreColumnName ] []
+                            [ input [ Html.Attributes.id "column-name", type_ "text", required True, value model.newColumnName, onInput StoreColumnName ] []
                             , button [ type_ "submit" ] [ text "Update" ]
                             , span [ class "cancel-link", onClick CancelUpdating ] [ text "Cancel" ]
                             ]
@@ -773,7 +783,7 @@ viewColumn model column =
                         ]
 
                   else
-                    div [ class "column__name", onClick (MarkColumnForUpdating column.id) ]
+                    div [ class "column__name", onClick (MarkColumnForUpdating column.id "column-name"), title "Click to update column name" ]
                         [ h2 [] [ text column.name ]
                         ]
                 ]
@@ -815,10 +825,10 @@ viewCard model columnId card =
         div [ class "card card--updating" ]
             [ form [ onSubmit UpdateCard ]
                 [ div [ class "card__name" ]
-                    [ input [ type_ "text", required True, value model.newCardName, onInput StoreCardName ] []
+                    [ input [ Html.Attributes.id "card-name", type_ "text", required True, value model.newCardName, onInput StoreCardName ] []
                     ]
                 , div [ class "card__description" ]
-                    [ textarea [ onInput StoreCardDescription ] [ text model.newCardDescription ]
+                    [ textarea [ Html.Attributes.id "card-description", onInput StoreCardDescription ] [ text model.newCardDescription ]
                     ]
                 , button [ type_ "submit" ] [ text "Update" ]
                 , span [ class "cancel-link", onClick CancelUpdating ] [ text "Cancel" ]
@@ -835,10 +845,10 @@ viewCard model columnId card =
 
     else
         div [ class "card", attribute "draggable" "true", onDragStart (MarkCardForDragging id) ]
-            [ div [ class "card__name", onClick (MarkCardForUpdating id) ]
+            [ div [ class "card__name", onClick (MarkCardForUpdating id "card-name"), title "Click to update card name and description" ]
                 [ h3 [] [ text card.name ]
                 ]
-            , div [ class "card__description", onClick (MarkCardForUpdating id) ] (Markdown.toHtml Nothing card.description)
+            , div [ class "card__description", onClick (MarkCardForUpdating id "card-description"), title "Click to update card name and description" ] (Markdown.toHtml Nothing card.description)
             ]
 
 

@@ -1,11 +1,11 @@
------------------------------------------
+----------------------------------------------------------
 --
 -- Main.elm
 -- A simple Kanban app written in Elm.
 -- Copyright (c) 2019 Wouter Admiraal <wad@wadmiraal.net>
 -- Distributed under the MIT License, see LICENSE.txt
 --
-------
+----------------------------------------------------------
 
 
 port module Main exposing (main)
